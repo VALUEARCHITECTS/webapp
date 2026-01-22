@@ -1,0 +1,93 @@
+name: Send Email Reminders
+
+on:
+  schedule:
+    # 月末リマインダー: 毎月最終日の午前9時（JST）に実行
+    # UTC 0:00 = JST 9:00
+    - cron: '0 0 28-31 * *'
+    
+    # 最終期限リマインダー: 毎月3日の午前9時（JST）に実行
+    # UTC 0:00 = JST 9:00
+    - cron: '0 0 3 * *'
+  
+  # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      reminder_type:
+        description: 'Reminder type (month-end or final-deadline)'
+        required: true
+        default: 'month-end'
+        type: choice
+        options:
+          - month-end
+          - final-deadline
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check if today is month end
+        id: check_month_end
+        run: |
+          CURRENT_DAY=$(date +%d)
+          NEXT_DAY=$(date -d tomorrow +%d)
+          
+          # If tomorrow is day 1, today is month end
+          if [ "$NEXT_DAY" = "01" ]; then
+            echo "is_month_end=true" >> $GITHUB_OUTPUT
+            echo "Today is month end"
+          else
+            echo "is_month_end=false" >> $GITHUB_OUTPUT
+            echo "Today is NOT month end"
+          fi
+      
+      - name: Send Month-End Reminder
+        if: |
+          (github.event.schedule == '0 0 28-31 * *' && steps.check_month_end.outputs.is_month_end == 'true') ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.reminder_type == 'month-end')
+        run: |
+          echo "Sending month-end reminder..."
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            https://webapp-avq.pages.dev/api/notifications/send-month-end-reminder \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          echo "Response: $BODY"
+          echo "HTTP Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Error: Failed to send month-end reminder"
+            exit 1
+          fi
+          
+          echo "Month-end reminder sent successfully!"
+      
+      - name: Send Final Deadline Reminder
+        if: |
+          (github.event.schedule == '0 0 3 * *') ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.reminder_type == 'final-deadline')
+        run: |
+          echo "Sending final deadline reminder..."
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            https://webapp-avq.pages.dev/api/notifications/send-final-deadline-reminder \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          echo "Response: $BODY"
+          echo "HTTP Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Error: Failed to send final deadline reminder"
+            exit 1
+          fi
+          
+          echo "Final deadline reminder sent successfully!"
