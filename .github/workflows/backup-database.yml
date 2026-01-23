@@ -1,3 +1,4 @@
+# Automated daily backup
 name: Daily Database Backup
 
 on:
