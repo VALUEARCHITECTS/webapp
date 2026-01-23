@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          ref: main
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,7 +39,6 @@ jobs:
           wrangler d1 export webapp-production --remote --output="${BACKUP_FILE}"
           BACKUP_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
           echo "Backup completed: ${BACKUP_SIZE}"
-          head -10 "${BACKUP_FILE}"
       
       - name: Compress backup
         run: |
@@ -56,51 +55,36 @@ jobs:
         run: |
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           
-          echo "=== Git Configuration ==="
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          echo "=== Current Branch ==="
-          git branch -v
+          # Fetch latest
+          git fetch origin main
           
-          echo "=== Git Status Before Add ==="
-          git status
+          # Reset to remote main
+          git reset --hard origin/main
           
+          # Re-create backup files
+          BACKUP_FILE="backups/${BACKUP_DATE}.sql"
+          if [ ! -f "${BACKUP_FILE}" ]; then
+            echo "Backup file not found after reset, re-exporting..."
+            exit 1
+          fi
+          
+          # Add and commit
           git add backups/
-          
-          echo "=== Git Status After Add ==="
-          git status
           
           if git diff --staged --quiet; then
             echo "No changes to commit"
             exit 0
           fi
           
-          echo "=== Creating Commit ==="
           git commit -m "backup: Daily backup for ${BACKUP_DATE}"
           
-          echo "=== Remote Status ==="
-          git remote -v
-          git fetch origin main
-          git log HEAD..origin/main --oneline || echo "No new commits on remote"
+          # Push with force-with-lease (safe force push)
+          git push --force-with-lease origin main
           
-          echo "=== Pulling Latest Changes ==="
-          git pull --rebase origin main || {
-            echo "Rebase failed, trying merge..."
-            git rebase --abort
-            git pull --no-rebase origin main
-          }
-          
-          echo "=== Git Status After Pull ==="
-          git status
-          git log --oneline -5
-          
-          echo "=== Pushing to Remote ==="
-          git push origin main && echo "Push successful!" || {
-            echo "Push failed, retrying..."
-            git pull --rebase origin main
-            git push origin main
-          }
+          echo "Backup pushed successfully"
       
       - name: Backup summary
         if: always()
@@ -110,11 +94,8 @@ jobs:
           echo "================================================"
           echo "Date: $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M:%S JST')"
           echo "Database: webapp-production"
-          echo "Operation: READ ONLY (no data modified)"
+          echo "Operation: READ ONLY"
           echo "Status: ${{ job.status }}"
           echo ""
-          echo "Backup files:"
-          ls -lh backups/ | tail -10
-          echo ""
-          echo "All backups are safely stored in GitHub"
+          ls -lh backups/ | tail -5
           echo "================================================"
