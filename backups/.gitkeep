@@ -1,0 +1,3 @@
+# This directory contains daily database backups
+# Backups are automatically created by GitHub Actions
+# Format: YYYY-MM-DD.sql and YYYY-MM-DD.sql.gz
