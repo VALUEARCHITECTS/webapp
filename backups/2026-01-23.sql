@@ -174,6 +174,7 @@ INSERT INTO "sessions" VALUES('b43022703b82b0d2e5b7a8ad7b1e46c8112476ceda045c07f
 INSERT INTO "sessions" VALUES('845b6a4934cf38b500b772814ea9918ac22410c4b71db992a8f4cd5815f07328',17,'2026-01-23T07:48:46.337Z','2026-01-22 07:48:46');
 INSERT INTO "sessions" VALUES('fd1bcb4cfd210220ca15874f6866eedc58a6c6af811e1ccd7d849b3c273b6849',30,'2026-01-23T11:20:41.345Z','2026-01-22 11:20:41');
 INSERT INTO "sessions" VALUES('a1cb3fe044e54e738edadbeba74c64a7e3c5f00d1c07a5fdd2508c6ffd349e6f',8,'2026-01-24T01:37:12.480Z','2026-01-23 01:37:12');
+INSERT INTO "sessions" VALUES('7e10cbadfd8b24b375350a715dc43bc8764cba0daa94f767814fdca5a49b6ca0',34,'2026-01-24T07:20:05.707Z','2026-01-23 07:20:05');
 CREATE TABLE attendance_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   employee_id INTEGER NOT NULL,
@@ -238,6 +239,7 @@ INSERT INTO "paid_leave_grants" VALUES(47,28,'2026-01-01',10,10,'2028-01-01','ad
 INSERT INTO "paid_leave_grants" VALUES(48,29,'2026-01-01',10,9.5,'2028-01-01','adjustment','auto','2026-01-14 09:13:11','2026-01-14 09:13:11');
 INSERT INTO "paid_leave_grants" VALUES(49,31,'2026-01-01',10,10,'2028-01-01','adjustment','auto','2026-01-15 15:18:27','2026-01-15 15:18:27');
 INSERT INTO "paid_leave_grants" VALUES(50,33,'2026-01-01',10,10,'2028-01-01','adjustment','auto','2026-01-20 23:57:42','2026-01-20 23:57:42');
+INSERT INTO "paid_leave_grants" VALUES(51,34,'2026-01-01',10,10,'2028-01-01','adjustment','auto','2026-01-23 07:19:55','2026-01-23 07:19:55');
 CREATE TABLE paid_leave_import_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   imported_by INTEGER NOT NULL,  
@@ -295,10 +297,10 @@ INSERT INTO "employee_invitations" VALUES(18,'a.miura@value-arc.com','employee',
 INSERT INTO "employee_invitations" VALUES(19,'y.imae@value-arc.com','employee','H3L8ePgvv4Qr9KnVaUy1JfbeQnb3pGgI',17,'2026-01-21T08:19:07.946Z','2026-01-20 23:57:42','2026-01-14 08:19:08');
 INSERT INTO "employee_invitations" VALUES(20,'y.taniyama@value-arc.com','employee','75IktH4chvw7m0SLn0j3jtA3Bmb8rc16',17,'2026-01-21T08:19:16.415Z','2026-01-14 08:20:51','2026-01-14 08:19:16');
 INSERT INTO "employee_invitations" VALUES(21,'t.kobayashi@value-arc.com','approver','jktvnvPyHJKAaY5yOerQsUxVE0I5IdkH',17,'2026-01-21T08:19:27.101Z','2026-01-14 08:58:27','2026-01-14 08:19:27');
-INSERT INTO "employee_invitations" VALUES(22,'k.takahashi@value-arc.com','employee','W0Rbk3nlKmb1p6tXGCR0ogHxFPUNnDPz',17,'2026-01-21T08:19:35.612Z',NULL,'2026-01-14 08:19:35');
 INSERT INTO "employee_invitations" VALUES(23,'s.usuzawa@value-arc.com','employee','YDGmp1Pl9qhByRHhm8FYrokfqIyOtu67',17,'2026-01-21T08:19:42.525Z','2026-01-14 08:43:58','2026-01-14 08:19:42');
 INSERT INTO "employee_invitations" VALUES(24,'k.ohtaki@value-arc.com','employee','2uVhN1AvzYXVVx3ER6F50AWaQ1bZAtaP',17,'2026-01-21T08:19:50.911Z',NULL,'2026-01-14 08:19:51');
 INSERT INTO "employee_invitations" VALUES(25,'n.yamamoto@value-arc.com','employee','8whQEmIkuXhcQevh1YQ0TgsWQ7rHdTXE',17,'2026-01-21T08:27:14.574Z','2026-01-15 15:18:27','2026-01-14 08:27:14');
+INSERT INTO "employee_invitations" VALUES(26,'k.takahashi@value-arc.com','employee','go2HAHKIAgCWy7W9nBzrQrKfnNvdIQRz',17,'2026-01-30T07:17:34.400Z','2026-01-23 07:19:55','2026-01-23 07:17:34');
 CREATE TABLE IF NOT EXISTS "employees" (
   id INTEGER PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
@@ -337,6 +339,7 @@ INSERT INTO "employees" VALUES(30,'k.hashimoto@value-arc.com','3a214b1b455bb9d8d
 INSERT INTO "employees" VALUES(31,'n.yamamoto@value-arc.com','a8a7824164432819035601ab6b99993a6f3e40f1ad7ec2d978bd3b18f4423c61','山本直将','-',NULL,NULL,'full_time','2024-07-16',NULL,'employee',10,'2026-01-15 15:18:26','2026-01-15 15:18:27',1,0,'2026-01-16',0,8,NULL);
 INSERT INTO "employees" VALUES(32,'user2@company.com','240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9','社員2','-',NULL,NULL,'full_time','2026-01-01',NULL,'employee',0,'2026-01-20 09:03:49','2026-01-20 09:03:49',1,0,'2026-07-01',0,18,NULL);
 INSERT INTO "employees" VALUES(33,'y.imae@value-arc.com','daa5dee6d5c73ab644c478ce4a9b6a5028a45cc62a9e0b6ce499c67aa1c72ab1','今江結希','-',NULL,NULL,'full_time','2025-08-01',NULL,'employee',10,'2026-01-20 23:57:42','2026-01-20 23:57:42',1,0,'2026-02-01',0,8,NULL);
+INSERT INTO "employees" VALUES(34,'k.takahashi@value-arc.com','66794504d5bb55ec6fd250ededf92ea3da57bc9787514d59a6534d4a085b6d34','髙橋　滉太','-',NULL,NULL,'full_time','2018-12-25',NULL,'employee',10,'2026-01-23 07:19:52','2026-01-23 07:19:55',1,0,'2026-06-25',0,8,NULL);
 CREATE TABLE IF NOT EXISTS "feature_requests" (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   employee_id INTEGER NOT NULL,
@@ -481,9 +484,9 @@ INSERT INTO "approval_history" VALUES(255,118,8,'approved','承認しました',
 INSERT INTO "approval_history" VALUES(256,117,8,'approved','承認しました',1,'2026-01-23 01:44:15');
 DELETE FROM sqlite_sequence;
 INSERT INTO "sqlite_sequence" VALUES('d1_migrations',19);
-INSERT INTO "sqlite_sequence" VALUES('paid_leave_grants',50);
+INSERT INTO "sqlite_sequence" VALUES('paid_leave_grants',51);
 INSERT INTO "sqlite_sequence" VALUES('paid_leave_usages',5);
-INSERT INTO "sqlite_sequence" VALUES('employee_invitations',25);
+INSERT INTO "sqlite_sequence" VALUES('employee_invitations',26);
 INSERT INTO "sqlite_sequence" VALUES('feature_requests',3);
 INSERT INTO "sqlite_sequence" VALUES('applications',135);
 INSERT INTO "sqlite_sequence" VALUES('approval_history',256);
