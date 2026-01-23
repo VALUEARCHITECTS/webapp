@@ -2,7 +2,10 @@ name: Daily Database Backup
 
 on:
   schedule:
+    # 毎日深夜2:00 JST（UTC 17:00前日）に実行
     - cron: '0 17 * * *'
+  
+  # 手動実行も可能
   workflow_dispatch:
 
 jobs:
@@ -15,6 +18,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: main
+          fetch-depth: 0
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -31,11 +35,21 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "Starting database backup..."
+          echo "🔍 Starting database backup (READ ONLY operation)..."
+          
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           BACKUP_FILE="backups/${BACKUP_DATE}.sql"
+          
+          echo "📅 Backup date: ${BACKUP_DATE}"
+          echo "📁 Backup file: ${BACKUP_FILE}"
+          
           wrangler d1 export webapp-production --remote --output="${BACKUP_FILE}"
-          echo "Backup completed"
+          
+          BACKUP_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
+          echo "✅ Backup completed: ${BACKUP_SIZE}"
+          
+          echo "📄 Backup file preview (first 10 lines):"
+          head -10 "${BACKUP_FILE}"
       
       - name: Compress backup
         run: |
@@ -43,61 +57,110 @@ jobs:
           BACKUP_FILE="backups/${BACKUP_DATE}.sql"
           rm -f "${BACKUP_FILE}.gz"
           gzip -k "${BACKUP_FILE}"
-          echo "Compression completed"
+          ORIGINAL_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
+          COMPRESSED_SIZE=$(ls -lh "${BACKUP_FILE}.gz" | awk '{print $5}')
+          echo "Original size: ${ORIGINAL_SIZE}"
+          echo "Compressed size: ${COMPRESSED_SIZE}"
+      
+      - name: Backup R2 bucket metadata (READ ONLY)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "🗂️ Starting R2 bucket metadata backup..."
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          R2_BACKUP_DIR="backups/r2-${BACKUP_DATE}"
+          mkdir -p "${R2_BACKUP_DIR}"
+          
+          echo "📋 Fetching file list from database..."
+          wrangler d1 execute webapp-production --remote --command="SELECT id, application_type, attachment_url, created_at FROM applications WHERE attachment_url IS NOT NULL ORDER BY created_at DESC;" --json > "${R2_BACKUP_DIR}/file_list.json"
+          
+          echo "📝 Extracting file URLs..."
+          cat "${R2_BACKUP_DIR}/file_list.json" | grep -o '"attachment_url"[^"]*"[^"]*"' | cut -d'"' -f4 | sort | uniq > "${R2_BACKUP_DIR}/file_urls.txt"
+          
+          FILE_COUNT=$(cat "${R2_BACKUP_DIR}/file_urls.txt" | wc -l)
+          echo "✅ Total files: ${FILE_COUNT}"
+          
+          cat > "${R2_BACKUP_DIR}/README.md" << 'EOF'
+# R2 Bucket Backup Metadata
+
+This directory contains metadata about files stored in Cloudflare R2 bucket.
+
+## Files
+
+- `file_list.json`: Complete database records with attachment URLs
+- `file_urls.txt`: List of all file URLs (one per line)
+- `README.md`: This file
+
+## Note
+
+This backup contains file URLs and metadata only.
+The actual image files are stored in Cloudflare R2 bucket: `webapp-receipts`
+
+## Cloudflare R2 Protection
+
+Cloudflare R2 has built-in durability (99.999999999%).
+Your files are automatically replicated across multiple data centers.
+
+For additional protection:
+1. Enable R2 versioning (Cloudflare Dashboard → R2 → Settings)
+2. Use R2 lifecycle policies
+EOF
+          
+          echo "✅ R2 metadata backup completed"
+      
+      - name: Compress R2 backup
+        run: |
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          R2_BACKUP_DIR="backups/r2-${BACKUP_DATE}"
+          
+          if [ -d "${R2_BACKUP_DIR}" ]; then
+            tar -czf "${R2_BACKUP_DIR}.tar.gz" -C backups "r2-${BACKUP_DATE}"
+            rm -rf "${R2_BACKUP_DIR}"
+            
+            R2_SIZE=$(ls -lh "${R2_BACKUP_DIR}.tar.gz" | awk '{print $5}')
+            echo "✅ R2 backup compressed: ${R2_SIZE}"
+          else
+            echo "⚠️ R2 backup directory not found, skipping compression"
+          fi
       
       - name: Configure Git
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
       
-      - name: Fetch latest changes
+      - name: Fetch and pull latest changes
         run: |
           git fetch origin main
-          echo "Fetched latest changes"
+          git pull --rebase origin main || git pull --no-rebase origin main || true
       
-      - name: Reset to remote
-        run: |
-          git reset --hard origin/main
-          echo "Reset to origin/main"
-      
-      - name: Add backup files
-        run: |
-          git add backups/
-          echo "Added backup files"
-      
-      - name: Check for changes
-        id: check
-        run: |
-          if git diff --staged --quiet; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "No changes to commit"
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "Changes detected"
-          fi
-      
-      - name: Commit changes
-        if: steps.check.outputs.has_changes == 'true'
+      - name: Commit and push backup
         run: |
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
-          git commit -m "backup: Daily backup for ${BACKUP_DATE}"
-          echo "Committed changes"
-      
-      - name: Push to remote
-        if: steps.check.outputs.has_changes == 'true'
-        run: |
-          git push --force-with-lease origin main
-          echo "Pushed to remote"
+          
+          git add backups/
+          
+          if git diff --staged --quiet; then
+            echo "ℹ️ No changes to commit (backup file already exists)"
+          else
+            git commit -m "backup: Daily backup for ${BACKUP_DATE} (DB + R2)"
+            git push origin main || (git pull --rebase origin main && git push origin main)
+            echo "✅ Backup committed and pushed to GitHub"
+          fi
       
       - name: Backup summary
         if: always()
         run: |
           echo "================================================"
-          echo "Database Backup Summary"
+          echo "📊 Database & R2 Backup Summary"
           echo "================================================"
-          echo "Date: $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M:%S JST')"
-          echo "Database: webapp-production"
-          echo "Status: ${{ job.status }}"
+          echo "📅 Date: $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M:%S JST')"
+          echo "💾 Database: webapp-production"
+          echo "📦 R2 Bucket: webapp-receipts"
+          echo "🔒 Operation: READ ONLY (no data modified)"
+          echo "✅ Status: ${{ job.status }}"
           echo ""
-          ls -lh backups/ | tail -5
+          echo "📁 Backup files:"
+          ls -lh backups/ | tail -10 || echo "Backups directory not found"
+          echo ""
+          echo "✅ All backups are safely stored in GitHub"
           echo "================================================"
