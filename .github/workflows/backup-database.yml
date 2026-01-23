@@ -1,4 +1,3 @@
-# Automated daily backup
 name: Daily Database Backup
 
 on:
@@ -9,6 +8,7 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,7 +45,13 @@ jobs:
         run: |
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           BACKUP_FILE="backups/${BACKUP_DATE}.sql"
+          
+          # 既存の圧縮ファイルがあれば削除
+          rm -f "${BACKUP_FILE}.gz"
+          
+          # 圧縮
           gzip -k "${BACKUP_FILE}"
+          
           ORIGINAL_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
           COMPRESSED_SIZE=$(ls -lh "${BACKUP_FILE}.gz" | awk '{print $5}')
           echo "Original size: ${ORIGINAL_SIZE}"
