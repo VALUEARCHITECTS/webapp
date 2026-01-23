@@ -31,14 +31,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          echo "Starting database backup (READ ONLY operation)..."
+          echo "Starting database backup..."
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           BACKUP_FILE="backups/${BACKUP_DATE}.sql"
-          echo "Backup date: ${BACKUP_DATE}"
-          echo "Backup file: ${BACKUP_FILE}"
           wrangler d1 export webapp-production --remote --output="${BACKUP_FILE}"
-          BACKUP_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
-          echo "Backup completed: ${BACKUP_SIZE}"
+          echo "Backup completed"
       
       - name: Compress backup
         run: |
@@ -46,45 +43,51 @@ jobs:
           BACKUP_FILE="backups/${BACKUP_DATE}.sql"
           rm -f "${BACKUP_FILE}.gz"
           gzip -k "${BACKUP_FILE}"
-          ORIGINAL_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
-          COMPRESSED_SIZE=$(ls -lh "${BACKUP_FILE}.gz" | awk '{print $5}')
-          echo "Original size: ${ORIGINAL_SIZE}"
-          echo "Compressed size: ${COMPRESSED_SIZE}"
+          echo "Compression completed"
       
-      - name: Commit and push backup
+      - name: Configure Git
         run: |
-          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
-          
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # Fetch latest
+      
+      - name: Fetch latest changes
+        run: |
           git fetch origin main
-          
-          # Reset to remote main
+          echo "Fetched latest changes"
+      
+      - name: Reset to remote
+        run: |
           git reset --hard origin/main
-          
-          # Re-create backup files
-          BACKUP_FILE="backups/${BACKUP_DATE}.sql"
-          if [ ! -f "${BACKUP_FILE}" ]; then
-            echo "Backup file not found after reset, re-exporting..."
-            exit 1
-          fi
-          
-          # Add and commit
+          echo "Reset to origin/main"
+      
+      - name: Add backup files
+        run: |
           git add backups/
-          
+          echo "Added backup files"
+      
+      - name: Check for changes
+        id: check
+        run: |
           if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
             echo "No changes to commit"
-            exit 0
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected"
           fi
-          
+      
+      - name: Commit changes
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           git commit -m "backup: Daily backup for ${BACKUP_DATE}"
-          
-          # Push with force-with-lease (safe force push)
+          echo "Committed changes"
+      
+      - name: Push to remote
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
           git push --force-with-lease origin main
-          
-          echo "Backup pushed successfully"
+          echo "Pushed to remote"
       
       - name: Backup summary
         if: always()
@@ -94,7 +97,6 @@ jobs:
           echo "================================================"
           echo "Date: $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M:%S JST')"
           echo "Database: webapp-production"
-          echo "Operation: READ ONLY"
           echo "Status: ${{ job.status }}"
           echo ""
           ls -lh backups/ | tail -5
