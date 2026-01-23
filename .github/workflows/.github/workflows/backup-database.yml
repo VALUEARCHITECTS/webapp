@@ -15,7 +15,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-          ref: main
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -64,11 +63,27 @@ jobs:
           
           if git diff --staged --quiet; then
             echo "No changes to commit"
-          else
-            git commit -m "backup: Daily backup for ${BACKUP_DATE}"
-            git push origin main
-            echo "Backup pushed successfully"
+            exit 0
           fi
+          
+          git commit -m "backup: Daily backup for ${BACKUP_DATE}"
+          
+          # Pull and rebase before pushing
+          git pull --rebase origin main
+          
+          # Retry push up to 3 times
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "Backup pushed successfully"
+              exit 0
+            fi
+            echo "Push failed, retrying ($i/3)..."
+            git pull --rebase origin main
+            sleep 2
+          done
+          
+          echo "Failed to push after 3 attempts"
+          exit 1
       
       - name: Backup summary
         if: always()
