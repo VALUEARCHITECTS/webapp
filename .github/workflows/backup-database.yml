@@ -1,0 +1,117 @@
+name: Daily Database Backup
+
+on:
+  schedule:
+    # 毎日深夜2:00 JST（UTC 17:00前日）に実行
+    - cron: '0 17 * * *'
+  
+  # 手動実行も可能
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Wrangler
+        run: npm install -g wrangler
+      
+      - name: Create backup directory
+        run: mkdir -p backups
+      
+      - name: Export database (READ ONLY)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "🔍 Starting database backup (READ ONLY operation)..."
+          
+          # 現在の日付を取得（JST）
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          BACKUP_FILE="backups/${BACKUP_DATE}.sql"
+          
+          echo "📅 Backup date: ${BACKUP_DATE}"
+          echo "📁 Backup file: ${BACKUP_FILE}"
+          
+          # データベースをエクスポート（READ ONLY）
+          # このコマンドはデータを読み取るだけで、削除・変更は一切行いません
+          wrangler d1 export webapp-production --remote --output="${BACKUP_FILE}"
+          
+          # バックアップファイルのサイズを確認
+          BACKUP_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
+          echo "✅ Backup completed: ${BACKUP_SIZE}"
+          
+          # バックアップファイルの最初の10行を表示（確認用）
+          echo "📄 Backup file preview (first 10 lines):"
+          head -10 "${BACKUP_FILE}"
+      
+      - name: Compress backup (optional)
+        run: |
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          BACKUP_FILE="backups/${BACKUP_DATE}.sql"
+          
+          # 圧縮してサイズを削減（オプション）
+          gzip -k "${BACKUP_FILE}"
+          
+          ORIGINAL_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
+          COMPRESSED_SIZE=$(ls -lh "${BACKUP_FILE}.gz" | awk '{print $5}')
+          
+          echo "📦 Original size: ${ORIGINAL_SIZE}"
+          echo "📦 Compressed size: ${COMPRESSED_SIZE}"
+          
+          # 圧縮版を保持、元のファイルも残す（復元時に使いやすいため）
+      
+      - name: Commit and push backup
+        run: |
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add backups/
+          
+          # 変更がある場合のみコミット
+          if git diff --staged --quiet; then
+            echo "⚠️ No changes to commit (backup file already exists)"
+          else
+            git commit -m "backup: Daily database backup for ${BACKUP_DATE}
+
+- Database: webapp-production
+- Date: ${BACKUP_DATE}
+- Operation: READ ONLY export
+- File: backups/${BACKUP_DATE}.sql
+- Compressed: backups/${BACKUP_DATE}.sql.gz
+
+This is an automated backup. All data is preserved.
+No data was deleted or modified in the database."
+            
+            git push
+            
+            echo "✅ Backup committed and pushed to GitHub"
+          fi
+      
+      - name: Backup summary
+        if: always()
+        run: |
+          echo "================================================"
+          echo "📊 Database Backup Summary"
+          echo "================================================"
+          echo "Date: $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M:%S JST')"
+          echo "Database: webapp-production"
+          echo "Operation: READ ONLY (no data modified)"
+          echo "Status: ${{ job.status }}"
+          echo ""
+          echo "💾 Backup files:"
+          ls -lh backups/ | tail -5
+          echo ""
+          echo "✅ All backups are safely stored in GitHub"
+          echo "================================================"
