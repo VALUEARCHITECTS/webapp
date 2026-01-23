@@ -13,26 +13,70 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      
       - name: Install Wrangler
         run: npm install -g wrangler
+      
       - name: Create backup directory
         run: mkdir -p backups
-      - name: Export database
+      
+      - name: Export database (READ ONLY)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
+          echo "Starting database backup (READ ONLY operation)..."
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           BACKUP_FILE="backups/${BACKUP_DATE}.sql"
+          echo "Backup date: ${BACKUP_DATE}"
+          echo "Backup file: ${BACKUP_FILE}"
           wrangler d1 export webapp-production --remote --output="${BACKUP_FILE}"
+          BACKUP_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
+          echo "Backup completed: ${BACKUP_SIZE}"
+          echo "Backup file preview (first 10 lines):"
+          head -10 "${BACKUP_FILE}"
+      
+      - name: Compress backup
+        run: |
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          BACKUP_FILE="backups/${BACKUP_DATE}.sql"
           gzip -k "${BACKUP_FILE}"
+          ORIGINAL_SIZE=$(ls -lh "${BACKUP_FILE}" | awk '{print $5}')
+          COMPRESSED_SIZE=$(ls -lh "${BACKUP_FILE}.gz" | awk '{print $5}')
+          echo "Original size: ${ORIGINAL_SIZE}"
+          echo "Compressed size: ${COMPRESSED_SIZE}"
+      
       - name: Commit and push backup
         run: |
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
-          git config user.email "bot@github.com"
-          git config user.name "GitHub Actions"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           git add backups/
-          git diff --staged --quiet || git commit -m "backup: ${BACKUP_DATE}" && git push
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "backup: Daily database backup for ${BACKUP_DATE}"
+            git push
+            echo "Backup committed and pushed to GitHub"
+          fi
+      
+      - name: Backup summary
+        if: always()
+        run: |
+          echo "================================================"
+          echo "Database Backup Summary"
+          echo "================================================"
+          echo "Date: $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M:%S JST')"
+          echo "Database: webapp-production"
+          echo "Operation: READ ONLY (no data modified)"
+          echo "Status: ${{ job.status }}"
+          echo ""
+          echo "Backup files:"
+          ls -lh backups/ | tail -5
+          echo ""
+          echo "All backups are safely stored in GitHub"
+          echo "================================================"
