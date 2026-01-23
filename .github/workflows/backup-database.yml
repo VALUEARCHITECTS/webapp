@@ -1,0 +1,38 @@
+name: Daily Database Backup
+
+on:
+  schedule:
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Wrangler
+        run: npm install -g wrangler
+      - name: Create backup directory
+        run: mkdir -p backups
+      - name: Export database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          BACKUP_FILE="backups/${BACKUP_DATE}.sql"
+          wrangler d1 export webapp-production --remote --output="${BACKUP_FILE}"
+          gzip -k "${BACKUP_FILE}"
+      - name: Commit and push backup
+        run: |
+          BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          git config user.email "bot@github.com"
+          git config user.name "GitHub Actions"
+          git add backups/
+          git diff --staged --quiet || git commit -m "backup: ${BACKUP_DATE}" && git push
