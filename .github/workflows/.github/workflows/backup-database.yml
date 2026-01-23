@@ -54,51 +54,53 @@ jobs:
       
       - name: Commit and push backup
         run: |
-          set +e  # Disable exit on error
-          
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           
+          echo "=== Git Configuration ==="
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
+          echo "=== Current Branch ==="
+          git branch -v
+          
+          echo "=== Git Status Before Add ==="
+          git status
+          
           git add backups/
+          
+          echo "=== Git Status After Add ==="
+          git status
           
           if git diff --staged --quiet; then
             echo "No changes to commit"
             exit 0
           fi
           
-          echo "Creating commit..."
+          echo "=== Creating Commit ==="
           git commit -m "backup: Daily backup for ${BACKUP_DATE}"
           
-          echo "Pulling latest changes..."
-          git pull --rebase origin main
-          PULL_RESULT=$?
+          echo "=== Remote Status ==="
+          git remote -v
+          git fetch origin main
+          git log HEAD..origin/main --oneline || echo "No new commits on remote"
           
-          if [ $PULL_RESULT -ne 0 ]; then
-            echo "Pull failed, aborting rebase and trying merge..."
-            git rebase --abort 2>/dev/null || true
+          echo "=== Pulling Latest Changes ==="
+          git pull --rebase origin main || {
+            echo "Rebase failed, trying merge..."
+            git rebase --abort
             git pull --no-rebase origin main
-          fi
+          }
           
-          echo "Pushing to remote..."
-          git push origin main
-          PUSH_RESULT=$?
+          echo "=== Git Status After Pull ==="
+          git status
+          git log --oneline -5
           
-          if [ $PUSH_RESULT -ne 0 ]; then
-            echo "First push failed, retrying with pull..."
+          echo "=== Pushing to Remote ==="
+          git push origin main && echo "Push successful!" || {
+            echo "Push failed, retrying..."
             git pull --rebase origin main
             git push origin main
-            PUSH_RESULT=$?
-          fi
-          
-          if [ $PUSH_RESULT -eq 0 ]; then
-            echo "Backup pushed successfully"
-            exit 0
-          else
-            echo "Failed to push backup"
-            exit 1
-          fi
+          }
       
       - name: Backup summary
         if: always()
