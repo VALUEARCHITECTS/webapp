@@ -56,24 +56,20 @@ jobs:
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+          
+          # Pull latest changes first
+          git pull origin main --no-rebase || echo "Pull failed, continuing..."
+          
           git add backups/
           
           # Check if there are changes
           if git diff --staged --quiet; then
             echo "No changes to commit"
-            exit 0
+          else
+            git commit -m "backup: Daily backup for ${BACKUP_DATE}"
+            git push origin main
+            echo "Backup committed and pushed to GitHub"
           fi
-          
-          # Commit
-          git commit -m "backup: Daily backup for ${BACKUP_DATE}"
-          
-          # Pull first to avoid conflicts
-          git pull --rebase origin main || true
-          
-          # Push
-          git push origin main
-          
-          echo "Backup committed and pushed to GitHub"
       
       - name: Backup summary
         if: always()
