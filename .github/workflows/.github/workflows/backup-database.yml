@@ -54,6 +54,8 @@ jobs:
       
       - name: Commit and push backup
         run: |
+          set +e  # Disable exit on error
+          
           BACKUP_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -66,24 +68,37 @@ jobs:
             exit 0
           fi
           
+          echo "Creating commit..."
           git commit -m "backup: Daily backup for ${BACKUP_DATE}"
           
-          # Pull and rebase before pushing
+          echo "Pulling latest changes..."
           git pull --rebase origin main
+          PULL_RESULT=$?
           
-          # Retry push up to 3 times
-          for i in 1 2 3; do
-            if git push origin main; then
-              echo "Backup pushed successfully"
-              exit 0
-            fi
-            echo "Push failed, retrying ($i/3)..."
+          if [ $PULL_RESULT -ne 0 ]; then
+            echo "Pull failed, aborting rebase and trying merge..."
+            git rebase --abort 2>/dev/null || true
+            git pull --no-rebase origin main
+          fi
+          
+          echo "Pushing to remote..."
+          git push origin main
+          PUSH_RESULT=$?
+          
+          if [ $PUSH_RESULT -ne 0 ]; then
+            echo "First push failed, retrying with pull..."
             git pull --rebase origin main
-            sleep 2
-          done
+            git push origin main
+            PUSH_RESULT=$?
+          fi
           
-          echo "Failed to push after 3 attempts"
-          exit 1
+          if [ $PUSH_RESULT -eq 0 ]; then
+            echo "Backup pushed successfully"
+            exit 0
+          else
+            echo "Failed to push backup"
+            exit 1
+          fi
       
       - name: Backup summary
         if: always()
