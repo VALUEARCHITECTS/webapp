@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '0 17 * * *'
   workflow_dispatch:
+  
+  # Updated: 2026-01-27 - Activated schedule after making repository public
 
 jobs:
   backup:
