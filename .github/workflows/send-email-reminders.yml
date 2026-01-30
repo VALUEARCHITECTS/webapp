@@ -27,24 +27,139 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Check if today is month end
+      - name: Check if today should send month-end reminder
         id: check_month_end
         run: |
+          # 現在の日付情報を取得
           CURRENT_DAY=$(date +%d)
+          CURRENT_MONTH=$(date +%m)
+          CURRENT_YEAR=$(date +%Y)
           NEXT_DAY=$(date -d tomorrow +%d)
+          DAY_OF_WEEK=$(date +%u)  # 1=月曜, 7=日曜
           
-          # If tomorrow is day 1, today is month end
+          echo "Current date: $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DAY (Day of week: $DAY_OF_WEEK)"
+          
+          # 翌日が1日かチェック（月末判定）
           if [ "$NEXT_DAY" = "01" ]; then
-            echo "is_month_end=true" >> $GITHUB_OUTPUT
-            echo "Today is month end"
+            echo "✅ Today is month end"
+            IS_MONTH_END=true
           else
-            echo "is_month_end=false" >> $GITHUB_OUTPUT
-            echo "Today is NOT month end"
+            echo "❌ Today is NOT month end"
+            IS_MONTH_END=false
           fi
+          
+          # 日本の祝日判定関数
+          is_japanese_holiday() {
+            local year=$1
+            local month=$2
+            local day=$3
+            
+            # 固定祝日
+            if [ "$month" = "01" ] && [ "$day" = "01" ]; then echo "true"; return; fi  # 元日
+            if [ "$month" = "01" ] && ([ "$day" = "08" ] || [ "$day" = "09" ] || [ "$day" = "10" ]); then
+              # 成人の日（1月第2月曜日）- 簡易的に8-14日の月曜日として判定
+              local dow=$(date -d "$year-$month-$day" +%u)
+              if [ "$dow" = "1" ] && [ "$day" -ge "08" ] && [ "$day" -le "14" ]; then
+                echo "true"; return
+              fi
+            fi
+            if [ "$month" = "02" ] && [ "$day" = "11" ]; then echo "true"; return; fi  # 建国記念の日
+            if [ "$month" = "02" ] && [ "$day" = "23" ]; then echo "true"; return; fi  # 天皇誕生日
+            if [ "$month" = "03" ] && ([ "$day" = "20" ] || [ "$day" = "21" ]); then echo "true"; return; fi  # 春分の日（近似）
+            if [ "$month" = "04" ] && [ "$day" = "29" ]; then echo "true"; return; fi  # 昭和の日
+            if [ "$month" = "05" ] && [ "$day" = "03" ]; then echo "true"; return; fi  # 憲法記念日
+            if [ "$month" = "05" ] && [ "$day" = "04" ]; then echo "true"; return; fi  # みどりの日
+            if [ "$month" = "05" ] && [ "$day" = "05" ]; then echo "true"; return; fi  # こどもの日
+            if [ "$month" = "07" ] && ([ "$day" = "15" ] || [ "$day" = "16" ] || [ "$day" = "17" ]); then
+              # 海の日（7月第3月曜日）
+              local dow=$(date -d "$year-$month-$day" +%u)
+              if [ "$dow" = "1" ] && [ "$day" -ge "15" ] && [ "$day" -le "21" ]; then
+                echo "true"; return
+              fi
+            fi
+            if [ "$month" = "08" ] && [ "$day" = "11" ]; then echo "true"; return; fi  # 山の日
+            if [ "$month" = "09" ] && ([ "$day" = "15" ] || [ "$day" = "16" ] || [ "$day" = "17" ]); then
+              # 敬老の日（9月第3月曜日）
+              local dow=$(date -d "$year-$month-$day" +%u)
+              if [ "$dow" = "1" ] && [ "$day" -ge "15" ] && [ "$day" -le "21" ]; then
+                echo "true"; return
+              fi
+            fi
+            if [ "$month" = "09" ] && ([ "$day" = "22" ] || [ "$day" = "23" ]); then echo "true"; return; fi  # 秋分の日（近似）
+            if [ "$month" = "10" ] && ([ "$day" = "08" ] || [ "$day" = "09" ] || [ "$day" = "10" ]); then
+              # スポーツの日（10月第2月曜日）
+              local dow=$(date -d "$year-$month-$day" +%u)
+              if [ "$dow" = "1" ] && [ "$day" -ge "08" ] && [ "$day" -le "14" ]; then
+                echo "true"; return
+              fi
+            fi
+            if [ "$month" = "11" ] && [ "$day" = "03" ]; then echo "true"; return; fi  # 文化の日
+            if [ "$month" = "11" ] && [ "$day" = "23" ]; then echo "true"; return; fi  # 勤労感謝の日
+            
+            echo "false"
+          }
+          
+          # 月末が平日（月-金）かつ非祝日かチェック
+          if [ "$IS_MONTH_END" = "true" ]; then
+            if [ "$DAY_OF_WEEK" -ge 1 ] && [ "$DAY_OF_WEEK" -le 5 ]; then
+              # 平日だが祝日かチェック
+              IS_HOLIDAY=$(is_japanese_holiday "$CURRENT_YEAR" "$CURRENT_MONTH" "$CURRENT_DAY")
+              if [ "$IS_HOLIDAY" = "false" ]; then
+                echo "✅ Month end is a weekday (not holiday) - Send today"
+                echo "should_send=true" >> $GITHUB_OUTPUT
+                echo "is_month_end=true" >> $GITHUB_OUTPUT
+                exit 0
+              else
+                echo "⚠️ Month end is a holiday - Check previous business day"
+              fi
+            else
+              echo "⚠️ Month end is weekend - Check previous business day"
+            fi
+          fi
+          
+          # 月末が休日の場合、直前の平日を探す
+          if [ "$IS_MONTH_END" = "true" ]; then
+            # 月末の日付を取得
+            LAST_DAY=$(date -d "$CURRENT_YEAR-$CURRENT_MONTH-01 +1 month -1 day" +%d)
+            
+            # 月末から逆算して最初の平日を探す
+            for i in {0..10}; do
+              CHECK_DAY=$((LAST_DAY - i))
+              if [ "$CHECK_DAY" -lt 1 ]; then break; fi
+              
+              CHECK_DATE="$CURRENT_YEAR-$CURRENT_MONTH-$(printf %02d $CHECK_DAY)"
+              CHECK_DOW=$(date -d "$CHECK_DATE" +%u)
+              
+              # 平日かチェック
+              if [ "$CHECK_DOW" -ge 1 ] && [ "$CHECK_DOW" -le 5 ]; then
+                # 祝日でないかチェック
+                IS_HOLIDAY=$(is_japanese_holiday "$CURRENT_YEAR" "$CURRENT_MONTH" "$CHECK_DAY")
+                if [ "$IS_HOLIDAY" = "false" ]; then
+                  echo "✅ Found last business day of month: $CHECK_DATE"
+                  
+                  # 今日がその日かチェック
+                  if [ "$CURRENT_DAY" = "$(printf %d $CHECK_DAY)" ]; then
+                    echo "✅ Today is the last business day before month end - Send today"
+                    echo "should_send=true" >> $GITHUB_OUTPUT
+                    echo "is_month_end=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "❌ Today is not the send day"
+                    echo "should_send=false" >> $GITHUB_OUTPUT
+                    echo "is_month_end=false" >> $GITHUB_OUTPUT
+                  fi
+                  exit 0
+                fi
+              fi
+            done
+          fi
+          
+          # デフォルト: 送信しない
+          echo "should_send=false" >> $GITHUB_OUTPUT
+          echo "is_month_end=false" >> $GITHUB_OUTPUT
       
       - name: Send Month-End Reminder
         if: |
-          (github.event.schedule == '0 0 28-31 * *' && steps.check_month_end.outputs.is_month_end == 'true') ||
+          (github.event.schedule == '0 0 28-31 * *' && steps.check_month_end.outputs.should_send == 'true') ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.reminder_type == 'month-end')
         run: |
           echo "Sending month-end reminder..."
